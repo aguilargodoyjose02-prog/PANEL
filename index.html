@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NanoSolar · Seguidor solar</title>
+<style>
+:root{--noche:#070d1a;--panel:#0e1830;--linea:#1f3358;--sol:#ffb84d;--ok:#5cf2c4;--alerta:#ff6b81;--tx:#dbe6ff}
+*{box-sizing:border-box;margin:0}
+body{background:radial-gradient(ellipse at 50% -10%,#16294d,var(--noche) 65%);color:var(--tx);font-family:"Bahnschrift","Segoe UI",system-ui,sans-serif;min-height:100vh;padding:18px}
+header{max-width:920px;margin:0 auto 14px}
+h1{font-size:1.7rem;font-weight:600;color:var(--sol)}
+header p{opacity:.65;font-size:.9rem}
+main{max-width:920px;margin:auto;display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(270px,1fr))}
+.card{background:var(--panel);border:1px solid var(--linea);border-radius:14px;padding:16px}
+.card h2{font-size:.95rem;font-weight:500;opacity:.75;margin-bottom:10px}
+.hero{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:22px;border-radius:22px;padding:22px}
+.hero svg{width:min(100%,380px)}
+.hero .txt{flex:1 1 240px;text-align:center}
+.grados{font-size:3.6rem;font-weight:600;color:var(--sol);line-height:1}
+#estado{margin-top:14px;padding:12px;border-radius:10px;border:1px solid var(--linea);font-size:1.1rem}
+.on{color:var(--ok);border-color:var(--ok)!important;box-shadow:0 0 20px #5cf2c433}
+.poca{color:var(--sol);border-color:var(--sol)!important}
+.off{color:var(--alerta);border-color:var(--alerta)!important}
+.fila{display:flex;justify-content:space-between;font-size:.95rem}
+.bar{height:12px;background:#0a1327;border:1px solid var(--linea);border-radius:6px;overflow:hidden;margin:6px 0 14px}
+.bar i{display:block;height:100%;width:0;background:var(--sol);transition:width .6s}
+.num{font-size:2.2rem;font-weight:600}
+canvas{width:100%;height:110px;display:block}
+@media (prefers-reduced-motion:reduce){.bar i{transition:none}}
+</style>
+</head>
+<body>
+<header>
+  <h1>NanoSolar</h1>
+  <p>Seguidor solar con ESP32, datos en vivo</p>
+</header>
+<main>
+  <section class="card hero">
+    <svg viewBox="0 0 220 125" aria-label="Ángulo del servo">
+      <path d="M20 105A90 90 0 0 1 200 105" fill="none" stroke="#1f3358" stroke-width="10" stroke-linecap="round"/>
+      <g id="marcas" stroke="#3a5688" stroke-width="2"></g>
+      <line id="aguja" x1="110" y1="105" x2="20" y2="105" stroke="#ffb84d" stroke-width="3" stroke-linecap="round"/>
+      <circle id="sol" cx="20" cy="105" r="9" fill="#ffb84d"/>
+      <circle cx="110" cy="105" r="6" fill="#dbe6ff"/>
+      <text x="14" y="122" fill="#7f95c4" font-size="9">0°</text>
+      <text x="196" y="122" fill="#7f95c4" font-size="9">180°</text>
+    </svg>
+    <div class="txt">
+      <div class="grados"><span id="ang">--</span>°</div>
+      <p style="opacity:.7;margin-top:4px">Ángulo del servo</p>
+      <div id="estado" class="poca">Conectando con el ESP32…</div>
+      <p id="mov" style="opacity:.7;margin-top:10px"></p>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Luz en cada sensor</h2>
+    <div class="fila"><span>LDR izquierdo</span><b><span id="il">--</span>%</b></div>
+    <div class="bar"><i id="bl"></i></div>
+    <div class="fila"><span>LDR derecho</span><b><span id="ir">--</span>%</b></div>
+    <div class="bar"><i id="br"></i></div>
+  </section>
+
+  <section class="card">
+    <h2>Luz promedio</h2>
+    <div class="num"><span id="luz">--</span>%</div>
+    <canvas id="g"></canvas>
+  </section>
+
+  <section class="card" id="cv" style="display:none">
+    <h2>Voltaje del panel</h2>
+    <div class="num"><span id="vp">--</span> V</div>
+  </section>
+</main>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script>
+// === CAMBIA ESTA LÍNEA por la URL de tu Realtime Database ===
+firebase.initializeApp({ databaseURL: "https://TU-PROYECTO-default-rtdb.firebaseio.com" });
+
+const $ = id => document.getElementById(id);
+let ultimo = 0, hist = [];
+
+// Marcas del dial cada 30°
+for (let a = 0; a <= 180; a += 30) {
+  const r = a * Math.PI / 180;
+  const l = document.createElementNS("http://www.w3.org/2000/svg", "line");
+  l.setAttribute("x1", 110 - 78 * Math.cos(r)); l.setAttribute("y1", 105 - 78 * Math.sin(r));
+  l.setAttribute("x2", 110 - 70 * Math.cos(r)); l.setAttribute("y2", 105 - 70 * Math.sin(r));
+  $("marcas").appendChild(l);
+}
+
+function dibujar() {
+  const c = $("g"), x = c.getContext("2d");
+  c.width = c.clientWidth; c.height = c.clientHeight;
+  x.strokeStyle = "#ffb84d"; x.lineWidth = 2; x.beginPath();
+  hist.forEach((v, i) => {
+    const px = i * c.width / 59, py = c.height - 4 - v * (c.height - 8) / 100;
+    i ? x.lineTo(px, py) : x.moveTo(px, py);
+  });
+  x.stroke();
+}
+
+function pintar(d) {
+  ultimo = Date.now();
+  const r = d.angulo * Math.PI / 180;
+  const px = 110 - 90 * Math.cos(r), py = 105 - 90 * Math.sin(r);
+  $("aguja").setAttribute("x2", px); $("aguja").setAttribute("y2", py);
+  $("sol").setAttribute("cx", px); $("sol").setAttribute("cy", py);
+  $("ang").textContent = d.angulo;
+  $("il").textContent = d.izq; $("ir").textContent = d.der;
+  $("bl").style.width = d.izq + "%"; $("br").style.width = d.der + "%";
+  $("luz").textContent = d.luz;
+  $("mov").textContent = d.moviendo ? "Buscando la luz…" : "Panel alineado con la luz";
+  const e = $("estado");
+  e.className = d.energia ? "on" : "poca";
+  e.textContent = d.energia ? "Entra energía al panel" : "Poca luz: casi no entra energía";
+  if (d.vpanel >= 0) { $("cv").style.display = ""; $("vp").textContent = d.vpanel.toFixed(2); }
+  hist.push(d.luz); if (hist.length > 60) hist.shift();
+  dibujar();
+}
+
+setInterval(() => {
+  if (ultimo && Date.now() - ultimo > 8000) {
+    const e = $("estado"); e.className = "off"; e.textContent = "Sin conexión con el ESP32";
+  }
+}, 1000);
+
+firebase.database().ref("seguidorSolar/actual").on("value", s => { if (s.val()) pintar(s.val()); });
+</script>
+</body>
+</html>
