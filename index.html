@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Jose Godoy Solar · Seguidor solar</title>
+<title>Jose Godoy · Seguidor solar</title>
 <style>
 :root{--noche:#070d1a;--panel:#0e1830;--linea:#1f3358;--sol:#ffb84d;--ok:#5cf2c4;--alerta:#ff6b81;--tx:#dbe6ff}
 *{box-sizing:border-box;margin:0}
@@ -32,7 +32,7 @@ canvas{width:100%;height:110px;display:block}
 </head>
 <body>
 <header>
-  <h1>NanoSolar</h1>
+  <h1>Jose Godoy</h1>
   <p>Seguidor solar con ESP32, datos en vivo</p>
 </header>
 <main>
@@ -77,8 +77,7 @@ canvas{width:100%;height:110px;display:block}
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <script>
-// === CAMBIA ESTA LÍNEA por la URL de tu Realtime Database ===
-firebase.initializeApp({ databaseURL: "https://panel-seguidor-de-luz-default-rtdb.firebaseio.com/" });
+firebase.initializeApp({ databaseURL: "https://panel-seguidor-de-luz-default-rtdb.firebaseio.com" });
 
 const $ = id => document.getElementById(id);
 let ultimo = 0, hist = [];
